@@ -6,6 +6,7 @@ var path = require('path');
 var gm = require('gm');
 var through = require('through');
 var async = require('async');
+var scaleSize = require('./lib/sizescaler.js');
 
 function start(watchDir, compressedDir, originalsDir) {
 	function shouldHandle(filename) {
@@ -42,19 +43,6 @@ function start(watchDir, compressedDir, originalsDir) {
 	});
 }
 
-/**
- * Returns an size object scaled by some factor
- * @param {Object} size
- * @param {Float} factor
- */
-function scaleSize(size, to) {
-	var min = Math.min(size.width, size.height);
-
-	return {
-		height: Math.floor(size.height * factor),
-		width: Math.floor(size.width * factor),
-	}
-}
 
 /**
  * Whether the image should be resized
@@ -66,18 +54,20 @@ function shouldResize(size) {
 }
 
 function copyFile(file, outputStream, callback) {
-	fs.createReadStream(file)
-		.pipe(outputStream);
+	var read = fs.createReadStream(file);
 
-	outputStream.on('error', callback);
-	outputStream.on('end', function() {
+	read.pipe(outputStream);
+	read.on('end', function() {
 		callback(null);
 	});
+
+	outputStream.on('error', callback);
 }
 
 function compressAndMove(file, resize, callback) {
 	console.log("compressAndMove for file: %s", file);
 	resize.on('end', function() {
+		console.log('compressAndMove end');
 		callback(null);
 	});
 
@@ -89,14 +79,19 @@ function compressAndMove(file, resize, callback) {
 			}
 
 			if (shouldResize(size)) {
-				var newSize = scaleSize(size, .25);
-				this.resize(newSize.width, newSize.height)
-					.stream()
-					.pipe(resize);
-			} else {
-				this.stream()
-					.pipe(resize);
+				console.log("should resize %d x %d", size.width, size.height);
+				var newSize = scaleSize(size, 1200, 960);
+				this.resize(newSize.width, newSize.height);
 			}
+
+			this.stream(function(err, stdout, stderr) {
+				if (err) callback(err);
+				stdout.pipe(resize);
+
+				stdout.on('end', function() {
+					callback(null);
+				});
+			});
 		});
 }
 
