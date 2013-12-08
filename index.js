@@ -32,62 +32,38 @@ var DEFAULTS = {
 function start(opts, callback) {
 	opts = _.extend(DEFAULTS, opts || {});
 
-	/**
-	 * Generates the compress fn based on whether the image should be resized
-	 *
-	 * @param {Object} size
-	 * @param {String} filepath (absolute)
-	 * @param {Stream} output
-	 *
-	 * @return {Function}
-	 */
-	function generateCompressFn(size, filepath, output) {
-		console.log('creating compressFn for %s with size =', filepath, size);
-		// default compressFn to just move the file to the compressedDir
-		var compressFn = copyFile.bind(null, filepath, output);
+	// Read files
+	var files = watcher(opts.watchDir)
+		.pipe(reader());
 
-		if (size.width > opts.widthThreshold || size.height > opts.heightThreshold) {
-			// compress fn should actually compress the file
-			var newSize = scaleSize(size, opts.outputSize, opts.minOutputSize)
-			compressFn = compressAndMove.bind(null, {
-				file: filepath,
-				output: output,
-				height: newSize.height,
-				width: newSize.width
-			});
-		}
-		return compressFn;
-	}
+	// Write originals
+	files.pipe(s3backer());
+	files.pipe(dirbacker(opts.originalsDir));
 
-	fs.watch(opts.watchDir, function(event, filename) {
-		console.log("change: %s file: %s", event, filename);
-		if (!shouldHandle(filename)) {
-			return;
-		}
+	// Write compressed
+	files.pipe(compressor(opts))
+		.pipe(dirbacker(opts.compressedDir))
+}
 
-		var filepath = path.join(__dirname, opts.watchDir, filename);
+// Create stream that emits a data event for each file change
+function watcher(dest) {
+}
 
-		fs.stat(filepath, function(err, stats) {
-			if (err || !stats.isFile()) {
-				return;
-			}
+// Create a stream that consumes data from a watcher stream and emits a read
+// stream for each of those files
+function reader() {
+}
 
-			imagesize(fs.createReadStream(filepath), function(err, size) {
-				if (err) {
-					console.error(err);
-					return;
-				}
+// Consume read streams from reader and emit a compressed read stream 
+function compressor(opts) {
+}
 
-				var resizeStream = fs.createWriteStream(path.join(opts.compressedDir, filename));
-				var backupStream = fs.createWriteStream(path.join(opts.originalsDir, filename));
+// Backup to s3 - backup each read stream to s3
+function s3backer(opts) {
+}
 
-				async.parallel([
-					copyFile.bind(null, filepath, backupStream),
-					generateCompressFn(size, filepath, resizeStream)
-				], opts.callback);
-			});
-		});
-	});
+// Backup to directory
+function dirbacker(dest) {
 }
 
 start({
