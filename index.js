@@ -3,7 +3,7 @@ var fs = require('fs');
 var path = require('path');
 var async = require('async');
 var copyFile = require('./lib/copy-file');
-var compressAndMove = require('./lib/compress-and-move');
+var compress = require('./lib/compress');
 var scaleSize = require('./lib/sizescaler.js');
 var imagesize = require('imagesize');
 
@@ -56,6 +56,9 @@ function reader() {
 
 // Consume read streams from reader and emit a compressed read stream 
 function compressor(opts) {
+	return through(function(stream) {
+		this.emit("data", compress(stream, opts))
+	});
 }
 
 // Backup to s3 - backup each read stream to s3
