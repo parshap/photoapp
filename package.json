@@ -12,6 +12,7 @@
   "dependencies": {
     "underscore": "~1.5.2",
     "async": "~0.2.9",
-    "gm": "~1.13.3"
+    "gm": "~1.13.3",
+    "imagesize": "~1.0.0"
   }
 }
