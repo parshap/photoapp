@@ -14,8 +14,8 @@ function shouldHandle(filename) {
 var DEFAULTS = {
 	outputSize: 1200,
 	minOutputSize: 960,
-	resizeWidthThreshold: 1500,
-	resizeHeightThreshold: 1500,
+	widthThreshold: 1500,
+	heightThreshold: 1500,
 };
 
 /**
@@ -24,8 +24,8 @@ var DEFAULTS = {
  * [opts.originalsDir]
  * [opts.outputSize]
  * [opts.minOuputSize]
- * [opts.resizeWidthThreshold]
- * [opts.resizeHeightThreshold]
+ * [opts.widthThreshold]
+ * [opts.heightThreshold]
  *
  * @param {Object} opts
  */
@@ -33,12 +33,30 @@ function start(opts, callback) {
 	opts = _.extend(DEFAULTS, opts || {});
 
 	/**
-	 * Whether the image should be resized
+	 * Generates the compress fn based on whether the image should be resized
 	 *
 	 * @param {Object} size
+	 * @param {String} filepath (absolute)
+	 * @param {Stream} output
+	 *
+	 * @return {Function}
 	 */
-	function shouldResize(size) {
-		return (size.width > opts.resizeWidthThreshold || size.height > opts.resizeHeightThreshold);
+	function generateCompressFn(size, filepath, output) {
+		console.log('creating compressFn for %s with size =', filepath, size);
+		// default compressFn to just move the file to the compressedDir
+		var compressFn = copyFile.bind(null, filepath, output);
+
+		if (size.width > opts.widthThreshold || size.height > opts.heightThreshold) {
+			// compress fn should actually compress the file
+			var newSize = scaleSize(size, opts.outputSize, opts.minOutputSize)
+			compressFn = compressAndMove.bind(null, {
+				file: filepath,
+				output: output,
+				height: newSize.height,
+				width: newSize.width
+			});
+		}
+		return compressFn;
 	}
 
 	fs.watch(opts.watchDir, function(event, filename) {
@@ -47,36 +65,27 @@ function start(opts, callback) {
 			return;
 		}
 
-		var filepath     = path.join(__dirname, opts.watchDir, filename);
-		var resizeStream = fs.createWriteStream(path.join(opts.compressedDir, filename));
-		var backupStream = fs.createWriteStream(path.join(opts.originalsDir, filename));
+		var filepath = path.join(__dirname, opts.watchDir, filename);
 
-		imagesize(fs.createReadStream(filepath), function(err, size) {
-			if (err) {
-				console.error(err);
+		fs.stat(filepath, function(err, stats) {
+			if (err || !stats.isFile()) {
 				return;
 			}
 
-			// default compressFn to just move the file to the compressedDir
-			console.log('filepath = %s', filepath);
-			var backupFn = copyFile.bind(null, filepath, backupStream);
-			var compressFn = copyFile.bind(null, filepath, resizeStream);
+			imagesize(fs.createReadStream(filepath), function(err, size) {
+				if (err) {
+					console.error(err);
+					return;
+				}
 
-			if (shouldResize(size)) {
-				// compress fn should actually compress the file
-				var newSize = scaleSize(size, opts.outputSize, opts.minOutputSize)
-				compressFn = compressAndMove.bind(null, {
-					file: filepath,
-					output: resizeStream,
-					height: newSize.height,
-					width: newSize.width
-				});
-			}
+				var resizeStream = fs.createWriteStream(path.join(opts.compressedDir, filename));
+				var backupStream = fs.createWriteStream(path.join(opts.originalsDir, filename));
 
-			async.parallel([
-				compressFn,
-				backupFn
-			], callback);
+				async.parallel([
+					copyFile.bind(null, filepath, backupStream),
+					generateCompressFn(size, filepath, resizeStream)
+				], opts.callback);
+			});
 		});
 	});
 }
