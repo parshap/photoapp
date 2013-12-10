@@ -4,8 +4,7 @@ var path = require('path');
 var async = require('async');
 var copyFile = require('./lib/copy-file');
 var compress = require('./lib/compress');
-var scaleSize = require('./lib/sizescaler.js');
-var imagesize = require('imagesize');
+var through = require('through');
 
 function shouldHandle(filename) {
 	return /\.(?:jpg|jpeg|png)$/i.test(filename);
@@ -42,7 +41,7 @@ function start(opts, callback) {
 
 	// Write compressed
 	files.pipe(compressor(opts))
-		.pipe(dirbacker(opts.compressedDir))
+		.pipe(dirbacker(opts.compressedDir));
 }
 
 // Create stream that emits a data event for each file change
@@ -57,7 +56,7 @@ function reader() {
 // Consume read streams from reader and emit a compressed read stream 
 function compressor(opts) {
 	return through(function(stream) {
-		this.emit("data", compress(stream, opts))
+		this.emit('data', compress(stream, opts))
 	});
 }
 
